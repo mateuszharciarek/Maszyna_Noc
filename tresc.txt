@@ -1,0 +1,408 @@
+Maszyna Noc
+
+Noc to maszyna abstrakcyjna, czyli abstrakcja komputera, programowana w języku o tej samej nazwie.
+
+Maszyna jest parametryzowana rozmiarem, będącym stałą całkowitą o wartości nie mniejszej niż 256. Pamięć maszyny rozmiaru N składa się z N słów, numerowanych od 0 do N - 1, przechowujących wartości całkowite od 0 do N - 1. Numer słowa pamięci będziemy nazywali jego adresem.
+
+Każda wartość W, będąca rezultatem wykonania operacji na maszynie rozmiaru N, jest sprowadzana do przedziału od 0 do N - 1 za pomocą operacji modulo oznaczanej mod(W, N) i zdefiniowanej następująco:
+
+mod(W, N) ≡ (W % N < 0) ? (W % N + N) : (W % N)
+
+gdzie % jest operatorem języka C. Nie można przyjąć po prostu:
+
+mod(W, N) ≡ (W % N)
+
+bo operator % w C czasem daje wynik ujemny dla dodatniego N i ujemnego W.
+
+W dalszej części opisu nie będziemy już wspominali o konieczności użycia operacji mod. Np. następnym słowem pamięci, po słowie o adresie A nazwiemy słowo o adresie A + 1 jeśli A < N - 1 lub słowo o adresie 0 jeśli A = N - 1.
+
+Maszyna Noc, oprócz pamięci, ma też trzy rejestry, które przechowują wartości całkowite z przedziału od 0 do N - 1:
+
+akumulator (AC, ang. accumulator) - wykorzystywany podczas obliczeń,
+wskaźnik stosu (SP, ang. stack pointer) - służy do adresowania pamięci,
+wskaźnik instrukcji (IP, ang. instruction pointer) - zawiera adres słowa, w którym jest kolejna instrukcja do wykonania.
+Przed rozpoczęciem wykonania programu wszystkie słowa pamięci i rejestry są inicjowane na 0. Następnie, zaczynając od słowa o adresie 0, do pamięci wpisywany jest program i rozpoczyna się jego wykonanie. Wartość początkowa rejestru IP wskazuje, jako pierwszą do wykonania, instrukcję w słowie o adresie 0.
+
+Instrukcje maszyny Noc zajmują jedno słowo pamięci. Dodatkowo, niektóre z nich korzystają też z kolejnego słowa, które będziemy w tym przypadku nazywali argumentem instrukcji.
+
+Instrukcja składa się z operacji i trybu adresowania, który określa, co ma być jej operandem, czyli na której danej wykonamy operację. Operandem może być akumulator lub słowo pamięci, reprezentowane przez swój adres.
+
+Reprezentacją instrukcji jest liczba całkowita, nazywana kodem instrukcji, o wartość P * 8 + A, gdzie P to kod operacji (ang. opcode) od 0 do 31 a A to numer trybu adresowania, od 0 do 7.
+
+Tryby adresowania maszyny opisane są w poniższej tabeli. Kolejne jej kolumny zawierają numer trybu, jego oznaczenie symboliczne w języku Noc (patrz opis języka poniżej), nazwę mnemoniczną, nazwę w języku angielskim i opis po polsku.
+
+numer	symbol	mnemonik	nazwa angielska	opis
+0	@	acc	accumulator	akumulator: operandem jest AC
+1	^	ind	indirect	adresowanie pośrednie: operandem jest słowo o adresie, który jest w AC
+2	}	pop	postincrement (pop)	adresowanie stosowe zwiększające po: operandem jest słowo o adresie, który jest w SP. Dodatkowo, już po określeniu operandu, wartość SP jest zwiększana o 1.
+3	{	psh	predecrement (push)	adresowanie stosowe zmniejszające przed: przed określeniem operandu wartość SP jest zmniejszana o 1. Następnie jako operand jest wskazywane słowo, którego adres jest w SP.
+4	#	imm	immediate	adresowanie natychmiastowe: operandem jest argument instrukcji, czyli słowo w pamięci bezpośrednio za instrukcją
+5	(brak)	abs	absolute	adresowanie bezwzględne: operandem jest słowo, którego adres jest wartością argumentu instrukcji
+6	$	dis	displacement	adresowanie z przesunięciem względem SP: operandem jest słowo, którego adres jest sumą wartości argumentu i wartości SP
+7	&	rel	relative	adresowanie z przesunięciem względem IP: operandem jest słowo, którego adres jest sumą wartości argumentu i adresu następnego słowa za argumentem.
+Jak widać, instrukcje o trybie adresowania imm, abs, dis i rel korzystają z argumentu a instrukcje z trybem acc, ind, pop, psh nie robią tego. Uwzględniamy to określając, która instrukcja jest następna za instrukcją zapisaną w słowie o adresie A. W przypadku instrukcji o trybie adresowania acc, ind, pop, psh jest to instrukcja o adresie A + 1 a dla trybów imm, abs, dis, rel instrukcja o adresie A + 2.
+
+Operacje maszyny Noc opisane są w poniższej tabeli. W kolejnych kolumnach jest liczbowy kod operacji, jej oznaczenie symboliczne w języku Noc, mnemonik, nazwa angielska i opis po polsku. Opis operacji zakłada, że w chwili jej wykonania w IP jest już zapisany adres następnej instrukcji czyli, w zależności od trybu adresowania, IP zostało zwiększone o 1 lub 2. Przyjmujemy też, że maszyna jest rozmiaru N.
+
+opkod	symbol	mnemonik	nazwa angielska	opis
+0	\_	JSR	jump to subroutine	zapisuje IP do AC a następnie adres operandu do IP
+1	_	JMP	jump	zapisuje adres operandu do IP
+2	~	JPZ	jump if AC is zero	jeśli wartością AC jest 0, zapisuje adres operandu do IP
+3	\~	JNZ	jump if AC not zero	jeśli wartością AC nie jest 0, zapisuje adres operandu do IP
+4	|	NND	nand	liczy NAND (patrz opis poniżej) wartości AC i wartości operandu, wynik zapisuje w AC
+5	\|	DNN	reverse nand	liczy NAND wartości operandu i wartości AC, wynik zapisuje w operandzie
+6	\}	INC	increment	zwiększa o 1 wartość operandu
+7	\{	DEC	decrement	zmniejsza o 1 wartość operandu
+8	\+	DDA	reverse add	dodaje wartość AC do wartości operandu i zapisuje wynik w operandzie
+9	\-	BUS	reverse subtract	odejmuje wartość AC od wartości operandu i zapisuje wynik w operandzie
+10	\*	LUM	reverse multiply	mnoży wartość operandu przez wartość AC i zapisuje wynik w operandzie
+11	\/	VID	reverse divide	dzieli wartość operandu przez wartość AC i zapisuje wynik w operandzie
+12	\%	DOM	reverse modulo	liczy resztę z dzielenia wartości operandu przez wartość AC i zapisuje wynik w operandzie
+13	\=	SNE	skip if not equal	jeśli wartość AC nie jest równa wartości operandu, dodaje 2 do IP
+14	\<	SGE	skip if greater or equal	jeśli wartość AC jest większa lub równa wartości operandu, dodaje 2 do IP
+15	\>	SLE	skip if less or equal	jeśli wartość AC jest mniejsza lub równa wartości operandu, dodaje 2 do IP
+16	+	ADD	add	dodaje wartość operandu do wartości AC i zapisuje wynik w AC
+17	-	SUB	subtract	odejmuje wartość operandu od wartości AC i zapisuje wynik w AC
+18	*	MUL	multiply	mnoży wartość AC przez wartość operandu i zapisuje wynik w AC
+19	/	DIV	divide	dzieli wartość AC przez wartość operandu i zapisuje wynik w AC
+20	%	MOD	modulo	liczy resztę z dzielenia wartości AC przez wartość operandu i zapisuje wynik w AC
+21	=	SEQ	skip if equal	jeśli wartość AC jest równa wartości operandu, dodaje 2 do IP
+22	<	SLT	skip if less then	jeśli wartość AC jest mniejsza od wartości operandu, dodaje 2 do IP
+23	>	SGT	skip if greater then	jeśli wartość AC jest większa od wartości operandu, dodaje 2 do IP
+24	,	LAA	load address to AC	zapisuje w AC adres operandu
+25	`	LAS	load address to SP	zapisuje w SP adres operandu
+26	.	LDA	load	zapisuje w AC wartość operandu
+27	:	STA	store	zapisuje wartość AC w operandzie
+28	?	ICH	input character	próbuje wczytać znak z wejścia. Jeśli się uda, zapisuje w operandzie jego kod, jeśli nie, wpisuje tam N - 1.
+29	!	OCH	output character	wypisuje na wyjście znak, którego kod jest wartością operandu
+30	\?	INU	input number	próbuje wczytać z wejścia zapisaną dziesiętnie liczbę całkowitą. Jeśli się uda, zapisuje ją w operandzie, jeśli nie, wpisuje tam N - 1.
+31	\!	ONU	output number	wypisuje na wyjście, w zapisie dziesiętnym, wartość operandu. Poza jej cyframi nie są wypisywane żadne inne znaki, nawet spacje.
+Ponad to, co o operacjach jest napisane w tabeli, przyjmujemy też, że:
+
+Jeśli operacja nie umieści w rejestrze IP innego adresu, kolejną wykonaną instrukcją będzie instrukcja następna w pamięci, za bieżącą.
+Operacje, które korzystają z adresu operandu, a więc JSR, JMP, JPZ, JNZ, LAA, LAS nie mogą być wykonane w trybie adresowania acc. Próba wykonania instrukcji łączącej taką operację z trybem acc powoduje zatrzymanie maszyny i przekazanie do systemu operacyjnego kodu wyjścia EXIT_SUCCESS (czyli wykonujemy exit(EXIT_SUCCESS);).
+Operacje DIV i MOD z operandem o wartości 0, a także operacje VID i DOM wykonane, gdy w AC jest 0, powodują zatrzymanie maszyny i przekazanie do systemu operacyjnego kodu wyjścia EXIT_FAILURE (wykonujemy exit(EXIT_FAILURE);).
+Operacje NND i DNN, dla wartości a i b liczą wartość, którą w języku C ma wyrażenie "~(a & b)". Jest to ciąg wartości funkcji NAND odpowiadających sobie bitów a i b. Funkcja NAND, po polsku nazywana dysjunkcją, niewspółzachodzeniem albo kreską Sheffera, przyjmuje wartość 0, gdy oba jej argumenty to 1 a 1 wpp.
+Przed wykonaniem, instrukcja oraz jej argument są wczytywane do tzw. rejestru instrukcji i dopiero tam analizowane. Gwarantuje to, że instrukcje zapisujące coś do pamięci nie mogą zaburzyć swojego wykonania, zmieniając słowo, w którym są zapisane.
+Język Noc
+
+Programy dla maszyny Noc piszemy w języku Noc. Program w tym języku opisuje ciąg wartości, które mają się znaleźć w kolejnych słowach pamięci maszyny, zaczynając od słowa o adresie 0.
+
+Najprostszym zapisem wartości jest jej reprezentacja dziesiętna, czyli niepusty ciąg cyfr dziesiętnych, po którym jest znak nie będący cyfrą dziesiętną. Dopuszczalne jest też poprzedzenie ciągu cyfr znakiem \, który w tym przypadku interpretujemy jak minus unarny. Pamiętając, że na maszynie rozmiaru N wszystkie wartości liczone są modulo N, ciąg znaków \1 uznajemy za zapis liczby N - 1.
+
+Jeśli wartość słowa ma być traktowana jak instrukcja, wygodniej będzie posłużyć się jej zapisem symbolicznym. W tabelach operacji i trybów adresowania podane są reprezentujące je ciągi znaków. Zapis instrukcji dostaniemy, sklejając je ze sobą. Np. \!# to instrukcja z operacją ONU i trybem adresowania imm, której kodem jest 252. Między oznaczeniem operacji i trybu adresowania nie może być żadnych znaków, nawet spacji.
+
+Często w kodzie źródłowym programu chcemy umieścić dane. W Nocy można to zrobić na dwa sposoby. Pierwszy z nich przypomina napisy z języka C. Ciąg znaków " ... " jest informacją dla interpretera, że w kolejnych słowach pamięci należy wpisać kody znaków wymienionych w cudzysłowach. Tak, jak w języku C, specjalnie traktujemy tzw. "escape sequence", czyli znaki poprzedzone \. Dla kombinacji dwóch znaków \X, gdzie X to jeden ze znaków a, b, f, n, r, t, v, \, " rezerwujemy w pamięci tylko jedno słowo, którego wartością będzie kod znaku, który w C oznaczylibyśmy przez '\X'. Np. "\n\n\n" umieści w pamięci trzy słowa o wartości '\n'. Zwracamy uwagę, że, inaczej niż w C, na końcu napisu nie jest automatycznie dopisywany znak o kodzie 0.
+
+Drugim sposobem na umieszczenie danych w kodzie, przydatnym, gdy chcemy zrobić tablicę, jest kombinacja znaków \" po której podany jest rozmiar K. Powoduje to umieszczenie w pamięci maszyny K słów o wartości 0.
+
+Adresy słów pamięci możemy reprezentować symbolicznie, za pomocą tzw. etykiet. Etykieta oznacza adres pierwszego słowa pamięci opisanego przez następującą po niej resztę programu lub adres pierwszego słowa za programem, jeśli w programie więcej słów nie ma. Dopuszczamy oznaczenie tego samego słowa wieloma etykietami. W Nocy mamy dwa rodzaje etykiety: nazwane i strukturalne.
+
+Etykietę nazwaną definiujemy za pomocą poprzedzonego bezpośrednio znakiem \ identyfikatora, czyli niepustego ciągu liter i cyfr nie zaczynającego się od cyfry, po którym jest znak nie będący ani literą ani cyfrą. Do adresu słowa oznaczonego etykietą odwołujemy się za pomocą tego samego identyfikatora, ale bez \. Program, w którym są dwie definicje etykiety nazwane tym samym identyfikatorem, jest błędny.
+
+Drugim rodzajem etykiet w Nocy są etykiety strukturalne. Są one reprezentowane za pomocą nawiasów okrągłych i kwadratowych. Tak, jak w przypadku etykiet nazwanych, definicja etykiety strukturalnej zaczyna się od \. W miejscu, w którym chcemy skorzystać z etykiety, umieszczamy nawias okrągły lub kwadratowy. Będzie on odwołaniem do etykiety zdefiniowanej za pomocą pasującego nawiasu tego samego rodzaju, z uwzględnieniem zagnieżdżania nawiasów tego rodzaju. W poprawnych programach nawiasy okrągłe muszą tworzyć wyrażenie nawiasowe i nawiasy kwadratowe muszą tworzyć wyrażenie nawiasowe. Nawiasy okrągłe nie muszą jednak być prawidłowo zagnieżdżone w kwadratowych i na odwrót. Ponadto, parą dla definicji etykiety musi być jej użycie, nie kolejna definicja.
+
+W przykładzie:
+
+( \( \[ [ ) ( \] \) ] \)
+1  2  3 4 2 5  4  5 3  1
+
+pasujące nawiasy oznaczono tymi samymi cyframi.
+
+Dla poprawienia czytelności programów, w kodzie źródłowym można umieszczać spacje, tabulacje i końce wiersza oraz komentarze od ; do końca wiersza. Pełnią one rolę separatorów, czyli w miejscu wystąpienia oddzielają od siebie kolejne elementy kodu źródłowego. Np. ciąg znaków e e uznajemy za dwa użycia etykiety e a nie jedno użycie etykiety ee. Podobnie, 12 3 to dwie liczby a nie jedna o wartości 123. Separatory mogą wystąpić między kolejnymi elementami kodu źródłowego, ale nie są wymagane. Np.
+
+\?@*@\!@!#10
+
+jest poprawnym zapisem programu stanowiącego pierwszy z podanych niżej przykładów.
+
+W kodzie programów w Nocy można też definiować stałe symboliczne za pomocą:
+
+\\ nazwa wartość
+
+równoważnej zapisowi w C:
+
+#define nazwa wartość
+
+W rozwiązaniu zadania nie trzeba jednak tej konstrukcji implementować.
+
+Polecenie
+
+Napisz interpreter języka Noc, czyli program, który wykona program w tym języku. Interpreter będzie wywoływany z jednym argumentem, będącym kodem źródłowym programu do wykonania. Operacje ICH oraz INU mają pobierać dane z wejścia interpretera a OCH i ONU powinny wypisywać wyniki na jego wyjście.
+
+Nie realizujemy pełnej wersji języka Noc. Zakładamy, że:
+
+identyfikatory etykiet nazwanych składają się z jednej małej litery,
+rozmiarem maszyny Noc będzie zawsze 256,
+wszelkie wartości liczbowe, z którymi program będzie miał do czynienia, zmieszczą się w zakresie typu int,
+następnym znakiem po \" jest cyfra dziesiętna rozpoczynająca zapis rozmiaru tablicy,
+w programie nie będzie stałych symbolicznych zdefiniowanych za pomocą \\.
+Przykłady
+
+W poniższych przykładach kod źródłowy programu w języku Noc zaczyna się od komentarza z reprezentacją tego samego programu w postaci ciągu liczb. W niektórych przykładach dodatkowo w komentarzach jest tłumaczenie na język C.
+
+Program wczytujący liczbę całkowitą i wypisujący wiersz z jej kwadratem:
+
+; 240 144 248 236 10
+
+\?@
+*@
+\!@
+!#10
+
+dla danych:
+
+14
+
+powinien dać wynik:
+
+196
+
+Program znajdujący największy wspólny dzielnik dwóch wczytanych liczb:
+
+; 13 4 0 0 245 2 245 3 213 2 109 3 13 32 213 2 189 3 13 26 213 3 77 2 13 30
+; 213 2 77 3 13 8 253 2 236 10
+
+                    ; #include <stdio.h>
+                    ;
+                    ; int main(void)
+_(                  ; {
+    \a 0            ;     int a;
+    \b 0            ;     int b;
+\)                  ;
+\? a                ;     scanf("%d", &a);
+\? b                ;     scanf("%d", &b);
+\( .a \= b _[       ;     while (a != b) {
+    .a > b _(       ;         if (a > b) {
+        .b \- a     ;             a -= b;
+    _[ \)           ;         } else {
+        .a \- b     ;             b -= a;
+    \]              ;         }
+_) \]               ;     }
+\!a !#"\n"          ;     printf("%d\n", a);
+                    ;     return 0;
+                    ; }
+
+dla danych:
+
+180
+165
+
+powinien dać wynik:
+
+15
+
+Program wypisujący "Hello":
+
+; 205 8 210 21 14 232 13 2 72 101 108 108 111 10
+
+`s
+\(
+    .}
+    ~[
+    !@
+_)
+\s "Hello\n"
+\]
+
+powinien dać wynik:
+
+Hello
+
+Program sumujący wczytany ciąg liczb zakończonych zerem:
+
+; 13 4 0 0 240 108 255 13 21 221 2 213 2 21 21 213 2 69 3 13 4 253 3 236 10
+
+                        ; #include <stdio.h>
+                        ;
+                        ; int main(void)
+_(                      ; {
+    \x 0                ;     int x;
+    \s 0                ;     int s = 0;
+\)                      ;
+\(                      ;     for (;;) {
+    \?@ \=# \1 _[ :x    ;         if (scanf("%d", &x) != 1) {
+                        ;             break;
+                        ;         }
+    .x ~[               ;         if (x == 0) {
+                        ;             break;
+                        ;         }
+    .x \+ s             ;         s += x;
+_) \] \]                ;     }
+\!s !#"\n"              ;     printf("%d\n", s);
+                        ;     return 0;
+                        ; }
+
+dla danych:
+
+1 3 5 7 9 0
+
+powinien dać wynik:
+
+25
+
+Program wypisujący w odwróconej kolejności wczytany ciąg 10 liczb:
+
+; 13 13 0 0 0 0 0 0 0 0 0 0 0 213 12 180 10 13 28 212 2 133 12 241 53 12 13 13
+; 212 9 221 12 213 12 108 255 13 49 212 2 133 12 249 236 10 61 12 13 32
+
+                        ; #include <stdio.h>
+                        ;
+                        ; int main(void)
+_(                      ; {
+    \a \"10             ;     int a[10];
+    \i 0                ;     int i;
+\)                      ;
+                        ;     i = 0;
+\( .i <# 10 _[          ;     while (i < 10) {
+    .# a + i \?^        ;         scanf("%d", &a[i]);
+    \} i                ;         ++i;
+_) \]                   ;     }
+.# 9 :i                 ;     i = 9;
+\( .i \=# \1 _[         ;     while (i != -1) {
+    .# a + i \!^ !# 10  ;         printf("%d\n", a[i]);
+    \{ i                ;         --i;
+_) \]                   ;     }
+                        ;     return 0;
+                        ; }
+
+dla danych:
+
+1 3 5 7 9 11 13 15 17 19
+
+powinien dać wynik:
+
+19
+17
+15
+13
+11
+9
+7
+5
+3
+1
+
+Program robiący to samo, tylko w inny sposób:
+
+; 212 10 243 56 29 2 212 10 250 236 10 56 29 8
+
+.# 10
+\(
+    \?{
+    \{@
+\~)
+
+.# 10
+\(
+    \!} !# 10
+    \{@
+\~)
+
+dla tych samych danych powinien dać taki sam wynik.
+
+Program rozwiązujący "Problem wież Hanoi":
+
+; 13 53 219 214 4 21 51 214 4 56 219 214 4 219 214 3 219 214 5 219 5 2 206 4
+; 254 3 236 45 236 62 254 2 236 10 214 4 56 219 214 2 219 214 4 219 214 6 219
+; 5 2 206 4 210 9 212 4 219 212 1 219 212 3 219 212 2 219 5 2 206 4
+
+
+_(                                              ; #include <stdio.h>
+                                                ;
+\h :{                                           ; void h(int n, int a, int b, int p)
+                                                ; {
+    .$4 ~(                                      ;     if (n > 0) {
+        .$4 \{@ :{ .$4 :{ .$3 :{ .$5 :{ \_h `$4 ;         h(n - 1, a, p, b);
+        \!$3 !#"-" !#">" \!$2 !#10              ;         printf("%d->%d\n", a, b);
+        .$4 \{@ :{ .$2 :{ .$4 :{ .$6 :{ \_h `$4 ;         h(n - 1, p, b, a);
+    \)                                          ;     }
+.} _^                                           ; }
+                                                ;
+\)                                              ; int main(void)
+                                                ; {
+.#4 :{ .#1 :{ .#3 :{ .#2 :{ \_h `$4             ;     h(4, 1, 3, 2);
+                                                ;     return 0;
+                                                ; }
+
+powinien dać wynik:
+
+1->2
+1->3
+2->3
+1->2
+3->1
+3->2
+1->2
+1->3
+2->3
+2->1
+3->1
+2->3
+1->2
+1->3
+2->3
+
+Uwagi i wskazówki
+
+Termin wysyłania rozwiązań przedłużamy do godz. 23:55. Dzień pozostaje bez zmian - wtorek, 22 grudnia.
+
+Wolno założyć, że dane są poprawne.
+
+Wolno założyć, że rozmiar kodu źródłowego programu nie przekroczy 10000 i że program ten zmieści się w pamięci rozmiaru 256.
+
+By odczytać argumenty, z którymi program został wywołany, deklarujemy funkcję main następująco:
+
+int main(int argc, char *argv[])
+{
+    ...
+}
+
+Jako wartość argc dostaniemy wówczas, zwiększoną o 1, liczbę argumentów, a same argumenty odczytamy z tablicy argv. Pierwszy argument będzie wartością argv[1].
+
+Stałe EXIT_SUCCESS i EXIT_FAILURE są zdefiniowane w pliku nagłówkowym stdlib.h.
+
+Do treści zadania dołączone są pliki z rozszerzeniem .noc, zawierające kod źródłowy programów w języku Noc z powyższych przykładów. Są też pliki .in z danymi dla nich, puste jeśli program danych nie wczytuje, oraz pliki z rozszerzeniem .out z wynikami wzorcowymi.
+
+Podkreślamy, że interpreter dostanie jako argument kod w Nocy a nie nazwę pliku, w którym program jest zapisany. Jeśli np. mamy interpreter języka Noc w pliku wykonywalnym ./noc i chcemy wykonać program z pierwszego przykładu, możemy to zrobić np. poleceniem:
+
+./noc '240 144 248 236 10'
+
+Gdy kod programu jest długi, podawanie go w ten sposób byłoby niewygodne. Możemy więc skorzystać z mechanizmu powłoki (interpretera poleceń konsoli) bash, pozwalającego na przekazanie do programu, jako argument, zawartości wskazanego pliku. Można to zrobić np. tak:
+
+bash -c './noc "$(< kwadrat.noc)"'
+
+lub:
+
+bash
+./noc "$(< kwadrat.noc)"
+
+Zwracamy uwagę, że takie przekazanie pliku tekstowego do programu usuwa z niego reprezentację końca ostatniego wiersza. Należy to uwzględnić, wczytując dane.
+
+Przypominamy, że program do testów będzie kompilowany poleceniem:
+
+gcc -ansi -pedantic -Wall -Wextra -Werror nazwa.c -o nazwa
+
+Wszystkie wymienione opcje kompilatora są obowiązkowe i nie wolno dodawać do nich żadnych innych.
+
+Do rozwiązania zadania może się przydać funkcja sscanf. Działa ona analogicznie do scanf, ale odczytuje dane z napisu przekazanego jej jako pierwszy argument. Co więcej, za pomocą specyfikatora argumentu %n możemy sprawdzić, ile znaków zostało wczytanych. Np. wynikiem programu:
+
+#include <stdio.h>
+
+int main(void)
+{
+    int a, b;
+
+    sscanf("567+89", "%d%n", &a, &b);
+    printf("%d %d\n", a, b);
+    return 0;
+}
+
+jest:
+
+567 3
+
+W pięciu z dwudziestu testów, którym poddane zostaną rozwiązania, kod programu w języku Noc będzie miał postać ciągu liczb całkowitych w zapisie dziesiętnym. Będzie więc wyglądał tak, jak treść komentarzy na początku każdego z podanych wyżej przykładów.
+
+Pięć spośród pozostałych piętnastu testów będzie na kodzie źródłowym, w którym nie występują żadne etykiety - ani nazwane ani strukturalne. W kolejnych pięciu testach będą etykiety nazwane, ale nie będzie strukturalnych. Tylko pięć testów zostanie przeprowadzonych na programach, w których mogą wystąpić wszystkie omówione w specyfikacji konstrukcje. Za interpreter, który nie realizuje wszystkich konstrukcji języka Noc można więc dostać niezerową ocenę poprawności.
+
+Proponujemy zacząć pracę od interpretera obsługującego tylko zapis programu jako ciągu liczb, następnie rozszerzyć go o obsługę symbolicznego zapisu instrukcji a na koniec zostawić etykiety nazwane i strukturalne.
